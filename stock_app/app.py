@@ -11,7 +11,7 @@ st.set_page_config(page_title="美股數據追蹤神器", layout="wide")
 DEFAULT_TICKERS = (
     "ORCL, MU, AVGO, TSM, NFLX, GOOG, META, NVDA, ASML, TSLA, MSFT, AMZN, AAPL, "
     "ON, CDNS, GFS, GEV, QCOM, KLAC, LRCX, SMC, AMAT, INTC, AMD, ARM, GE, VRT, "
-    "IBM, SAP, ADBE, NOW, CRM, FNT, PANW, CRWD, APP, VRSK, MRVL, VRSN, DUOL, "
+    "IBM, SAP, ADBE, NOW, CRM, FTNT, PANW, CRWD, APP, VRSK, MRVL, VRSN, DUOL, "
     "ZM, CSCO, SNPS"
 )
 
@@ -122,4 +122,5 @@ if ticker_list:
         mime='text/csv',
     )
 else:
+
     st.warning("⚠️ 請至少輸入一個有效的股票代號。")
