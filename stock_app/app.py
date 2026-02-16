@@ -8,9 +8,11 @@ import pytz
 st.set_page_config(page_title="美股數據追蹤神器", layout="wide")
 
 # ==========================================
-# 👇 請將您的 Google Sheet CSV 連結貼在下方引號中 👇
-# 格式範例: "https://docs.google.com/.../published?output=csv"
-GOOGLE_SHEET_URL = "" 
+# 👇 1. [程式讀取用] 已幫您填入發布的 CSV 連結 👇
+GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRZNUW6Gj0wIYcSXNyYNXbdU9XolqG3tFs8RPMJmq8_9yxvf7vbQ3Wd_JE-C-BYpsBZULZtdT9QtRg9/pub?gid=0&single=true&output=csv"
+
+# 👇 2. [舅舅編輯用] 已填入您的共用連結 (讓舅舅可以編輯) 👇
+GOOGLE_SHEET_EDIT_URL = "https://docs.google.com/spreadsheets/d/1w7BGj0xHQWVFvR8PogFj6NmsMmJ6CCzOY4AeAZFURoY/edit?usp=sharing"
 # ==========================================
 
 # 預設的股票代碼清單 (如果沒有設定 Google Sheet，就會用這個)
@@ -85,13 +87,8 @@ def get_stock_data(ticker_list):
 def load_tickers_from_sheet(url):
     try:
         # 讀取 CSV，假設第一欄是股票代號，且沒有標題 (header=None)
-        # 如果您的試算表第一列是標題 (例如 'Symbol')，請改用 header=0
         df_sheet = pd.read_csv(url, header=None)
-        
-        # 取第一欄 (column 0) 的資料轉成清單
         tickers = df_sheet[0].dropna().astype(str).tolist()
-        
-        # 過濾掉可能混入的標題行 (例如 user 打了 'Ticker' 字樣)
         clean_tickers = [t for t in tickers if len(t) < 10 and t.upper() != "TICKER"]
         return clean_tickers
     except Exception as e:
@@ -119,8 +116,6 @@ if GOOGLE_SHEET_URL:
 else:
     # 沒有設定 URL，使用手動輸入模式
     st.markdown("資料來源：**手動設定模式** (延遲報價)")
-    
-    # 處理網址參數 (為了相容之前的書籤功能)
     query_params = st.query_params
     url_tickers = query_params.get("tickers", None)
     initial_value = url_tickers if url_tickers else DEFAULT_TICKERS_STR
@@ -139,12 +134,26 @@ else:
     final_ticker_list = [t.strip() for t in user_tickers.split(',') if t.strip()]
 
 # --- 顯示主要內容 ---
+if GOOGLE_SHEET_URL:
+    with st.sidebar:
+        st.header("⚙️ 設定")
+        st.info("目前的股票清單是由 Google 試算表控制。")
+        
+        # [新增] 編輯按鈕
+        if GOOGLE_SHEET_EDIT_URL:
+            st.link_button("📝 點此去修改股票清單", GOOGLE_SHEET_EDIT_URL)
+            st.caption("修改後請等約 5 分鐘，再按重新整理。")
+        
+        if st.button("🔄 重新載入資料 (Refresh)"):
+            st.cache_data.clear()
+            st.rerun()
+
 if source_msg:
     st.info(source_msg)
 
-if st.button("🔄 重新載入資料 (Refresh)"):
-    st.cache_data.clear()
-    st.rerun()
+# 如果是手動模式，重新載入按鈕已經在上方
+if GOOGLE_SHEET_URL and not source_msg: 
+     pass # 避免重複顯示
 
 if final_ticker_list:
     df = get_stock_data(final_ticker_list)
