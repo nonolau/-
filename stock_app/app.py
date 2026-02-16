@@ -7,12 +7,22 @@ import pytz
 # --- 網頁設定 ---
 st.set_page_config(page_title="美股數據追蹤神器", layout="wide")
 
-# 預設的股票代碼清單
-DEFAULT_TICKERS = (
+# ==========================================
+# 👇 請將您的 Google Sheet CSV 連結貼在下方引號中 👇
+# 格式範例: "https://docs.google.com/.../published?output=csv"
+GOOGLE_SHEET_URL = "" 
+# ==========================================
+
+# 預設的股票代碼清單 (如果沒有設定 Google Sheet，就會用這個)
+# 注意：變數名稱必須是 DEFAULT_TICKERS_STR，請勿更改名稱
+DEFAULT_TICKERS_STR = (
     "ORCL, MU, AVGO, TSM, NFLX, GOOG, META, NVDA, ASML, TSLA, MSFT, AMZN, AAPL, "
-    "ON, CDNS, GFS, GEV, QCOM, KLAC, LRCX, SMCL, AMAT, INTC, AMD, ARM, GE, VRT, "
+    "ON, CDNS, GFS, GEV, QCOM, KLAC, LRCX, SMCI, AMAT, INTC, AMD, ARM, GE, VRT, "
     "IBM, SAP, ADBE, NOW, CRM, FTNT, PANW, CRWD, APP, VRSK, MRVL, VRSN, DUOL, "
-    "ZM, CSCO, SNPS,ANET,DELL,MNST,U,CRCL,CCJ,OXY,SNOW,HOOD,PLTR,RBLX,VST,SOFI,TEM,EBAY,SE,SHOP,PDD,PCAR,CAT,WMT,LULU,MS,BAC,CVX,ABBV,NEE,EXPE,BKNG,GEHC,MELI,ANF,GS,AXP,LLY,NVO,REGN,ISRG,ABNB,KO,UBER,UPST,PYPL,CRWV,MRK,UNH,SBUX,V,SNAP,IBM,AFRM,DECK"
+    "ZM, CSCO, SNPS, ANET, DELL, MNST, U, CRCL, CCJ, OXY, SNOW, HOOD, PLTR, "
+    "RBLX, VST, SOFI, TEM, EBAY, SE, SHOP, PDD, PCAR, CAT, WMT, LULU, MS, BAC, "
+    "CVX, ABBV, NEE, EXPE, BKNG, GEHC, MELI, ANF, GS, AXP, LLY, NVO, REGN, ISRG, "
+    "ABNB, KO, UBER, UPST, PYPL, CRWV, MRK, UNH, SBUX, V, SNAP, IBM, AFRM, DECK"
 )
 
 # --- 核心功能：抓取資料 ---
@@ -26,7 +36,7 @@ def get_stock_data(ticker_list):
     total_tickers = len(ticker_list)
 
     for i, symbol in enumerate(ticker_list):
-        symbol = symbol.strip().upper()
+        symbol = str(symbol).strip().upper()
         if not symbol:
             continue
             
@@ -49,8 +59,8 @@ def get_stock_data(ticker_list):
             
             # 抓取基本面資料
             info = ticker.info
-            trailing_pe = info.get('trailingPE', None) # 過去四季本益比
-            forward_pe = info.get('forwardPE', None)   # 預估本益比
+            trailing_pe = info.get('trailingPE', None)
+            forward_pe = info.get('forwardPE', None)
 
             data.append({
                 "代號": symbol,
@@ -71,33 +81,83 @@ def get_stock_data(ticker_list):
     
     return pd.DataFrame(data)
 
+# --- 輔助功能：從 Google Sheet 讀取清單 ---
+def load_tickers_from_sheet(url):
+    try:
+        # 讀取 CSV，假設第一欄是股票代號，且沒有標題 (header=None)
+        # 如果您的試算表第一列是標題 (例如 'Symbol')，請改用 header=0
+        df_sheet = pd.read_csv(url, header=None)
+        
+        # 取第一欄 (column 0) 的資料轉成清單
+        tickers = df_sheet[0].dropna().astype(str).tolist()
+        
+        # 過濾掉可能混入的標題行 (例如 user 打了 'Ticker' 字樣)
+        clean_tickers = [t for t in tickers if len(t) < 10 and t.upper() != "TICKER"]
+        return clean_tickers
+    except Exception as e:
+        st.error(f"無法讀取 Google Sheet，請檢查連結設定。\n錯誤訊息: {e}")
+        return []
+
 # --- 網頁介面 (UI) ---
 
 st.title("📈 美股數據追蹤表")
-st.markdown("資料來源：Yahoo Finance (延遲報價)")
 
-with st.sidebar:
-    st.header("⚙️ 設定")
-    st.write("在此輸入股票代號 (用逗號分隔)：")
-    user_tickers = st.text_area("股票代號清單", value=DEFAULT_TICKERS, height=300)
-    if st.button("🔄 手動更新資料"):
-        st.cache_data.clear()
-        st.rerun()
+# --- 決定資料來源 ---
+final_ticker_list = []
+source_msg = ""
 
-ticker_list = [t.strip() for t in user_tickers.split(',') if t.strip()]
+if GOOGLE_SHEET_URL:
+    # 優先使用 Google Sheet
+    st.markdown(f"資料來源：**Google 試算表連動** (延遲報價)")
+    sheet_tickers = load_tickers_from_sheet(GOOGLE_SHEET_URL)
+    if sheet_tickers:
+        final_ticker_list = sheet_tickers
+        source_msg = "✅ 已從 Google Sheet 載入最新清單"
+    else:
+        st.warning("Google Sheet 讀取失敗，切換回預設清單。")
+        final_ticker_list = [t.strip() for t in DEFAULT_TICKERS_STR.split(',') if t.strip()]
+else:
+    # 沒有設定 URL，使用手動輸入模式
+    st.markdown("資料來源：**手動設定模式** (延遲報價)")
+    
+    # 處理網址參數 (為了相容之前的書籤功能)
+    query_params = st.query_params
+    url_tickers = query_params.get("tickers", None)
+    initial_value = url_tickers if url_tickers else DEFAULT_TICKERS_STR
 
-if ticker_list:
-    df = get_stock_data(ticker_list)
+    with st.sidebar:
+        st.header("⚙️ 設定")
+        user_tickers = st.text_area("股票代號清單", value=initial_value, height=300)
+        
+        if user_tickers != initial_value:
+            st.query_params["tickers"] = user_tickers
+            
+        if st.button("🔄 手動更新資料"):
+            st.cache_data.clear()
+            st.rerun()
+            
+    final_ticker_list = [t.strip() for t in user_tickers.split(',') if t.strip()]
+
+# --- 顯示主要內容 ---
+if source_msg:
+    st.info(source_msg)
+
+if st.button("🔄 重新載入資料 (Refresh)"):
+    st.cache_data.clear()
+    st.rerun()
+
+if final_ticker_list:
+    df = get_stock_data(final_ticker_list)
 
     if not df.empty and "代號" in df.columns:
         df = df.sort_values(by="代號").reset_index(drop=True)
 
-    # 顯示更新時間 (美東)
+    # 顯示更新時間
     ny_timezone = pytz.timezone('America/New_York')
     ny_time = datetime.now(ny_timezone).strftime('%Y-%m-%d %H:%M:%S %Z')
-    st.info(f"最後更新時間 (美東): {ny_time}")
+    st.caption(f"最後更新時間 (美東): {ny_time}")
 
-    # 顯示表格與欄位設定
+    # 顯示表格
     st.dataframe(
         df, 
         use_container_width=True, 
@@ -113,7 +173,6 @@ if ticker_list:
         }
     )
 
-    # 下載 CSV 按鈕
     csv = df.to_csv(index=False).encode('utf-8-sig')
     st.download_button(
         label="📥 下載 Excel (CSV)",
@@ -122,6 +181,4 @@ if ticker_list:
         mime='text/csv',
     )
 else:
-
-    st.warning("⚠️ 請至少輸入一個有效的股票代號。")
-
+    st.warning("⚠️ 目前清單是空的，請檢查 Google Sheet 或輸入代號。")
