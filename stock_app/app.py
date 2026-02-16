@@ -8,15 +8,14 @@ import pytz
 st.set_page_config(page_title="美股數據追蹤神器", layout="wide")
 
 # ==========================================
-# 👇 1. [程式讀取用] 已幫您填入發布的 CSV 連結 👇
+# 👇 1. [程式讀取用] CSV 連結 (讀取舅舅的清單) 👇
 GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRZNUW6Gj0wIYcSXNyYNXbdU9XolqG3tFs8RPMJmq8_9yxvf7vbQ3Wd_JE-C-BYpsBZULZtdT9QtRg9/pub?gid=0&single=true&output=csv"
 
-# 👇 2. [舅舅編輯用] 已填入您的共用連結 (讓舅舅可以編輯) 👇
+# 👇 2. [舅舅編輯用] 共用連結 (讓舅舅去編輯) 👇
 GOOGLE_SHEET_EDIT_URL = "https://docs.google.com/spreadsheets/d/1w7BGj0xHQWVFvR8PogFj6NmsMmJ6CCzOY4AeAZFURoY/edit?usp=sharing"
 # ==========================================
 
-# 預設的股票代碼清單 (如果沒有設定 Google Sheet，就會用這個)
-# 注意：變數名稱必須是 DEFAULT_TICKERS_STR，請勿更改名稱
+# 預設的股票代碼清單 (備用)
 DEFAULT_TICKERS_STR = (
     "ORCL, MU, AVGO, TSM, NFLX, GOOG, META, NVDA, ASML, TSLA, MSFT, AMZN, AAPL, "
     "ON, CDNS, GFS, GEV, QCOM, KLAC, LRCX, SMCI, AMAT, INTC, AMD, ARM, GE, VRT, "
@@ -86,7 +85,6 @@ def get_stock_data(ticker_list):
 # --- 輔助功能：從 Google Sheet 讀取清單 ---
 def load_tickers_from_sheet(url):
     try:
-        # 讀取 CSV，假設第一欄是股票代號，且沒有標題 (header=None)
         df_sheet = pd.read_csv(url, header=None)
         tickers = df_sheet[0].dropna().astype(str).tolist()
         clean_tickers = [t for t in tickers if len(t) < 10 and t.upper() != "TICKER"]
@@ -104,8 +102,8 @@ final_ticker_list = []
 source_msg = ""
 
 if GOOGLE_SHEET_URL:
-    # 優先使用 Google Sheet
-    st.markdown(f"資料來源：**Google 試算表連動** (延遲報價)")
+    # [更新] 這裡的文字顯示更清楚了
+    st.markdown(f"清單來源：**Google 試算表** | 數據來源：**Yahoo Finance** (延遲報價)")
     sheet_tickers = load_tickers_from_sheet(GOOGLE_SHEET_URL)
     if sheet_tickers:
         final_ticker_list = sheet_tickers
@@ -114,8 +112,7 @@ if GOOGLE_SHEET_URL:
         st.warning("Google Sheet 讀取失敗，切換回預設清單。")
         final_ticker_list = [t.strip() for t in DEFAULT_TICKERS_STR.split(',') if t.strip()]
 else:
-    # 沒有設定 URL，使用手動輸入模式
-    st.markdown("資料來源：**手動設定模式** (延遲報價)")
+    st.markdown("數據來源：**Yahoo Finance** (延遲報價)")
     query_params = st.query_params
     url_tickers = query_params.get("tickers", None)
     initial_value = url_tickers if url_tickers else DEFAULT_TICKERS_STR
@@ -139,7 +136,6 @@ if GOOGLE_SHEET_URL:
         st.header("⚙️ 設定")
         st.info("目前的股票清單是由 Google 試算表控制。")
         
-        # [新增] 編輯按鈕
         if GOOGLE_SHEET_EDIT_URL:
             st.link_button("📝 點此去修改股票清單", GOOGLE_SHEET_EDIT_URL)
             st.caption("修改後請等約 5 分鐘，再按重新整理。")
@@ -151,22 +147,16 @@ if GOOGLE_SHEET_URL:
 if source_msg:
     st.info(source_msg)
 
-# 如果是手動模式，重新載入按鈕已經在上方
-if GOOGLE_SHEET_URL and not source_msg: 
-     pass # 避免重複顯示
-
 if final_ticker_list:
     df = get_stock_data(final_ticker_list)
 
     if not df.empty and "代號" in df.columns:
         df = df.sort_values(by="代號").reset_index(drop=True)
 
-    # 顯示更新時間
     ny_timezone = pytz.timezone('America/New_York')
     ny_time = datetime.now(ny_timezone).strftime('%Y-%m-%d %H:%M:%S %Z')
     st.caption(f"最後更新時間 (美東): {ny_time}")
 
-    # 顯示表格
     st.dataframe(
         df, 
         use_container_width=True, 
